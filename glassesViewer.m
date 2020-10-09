@@ -32,7 +32,7 @@ end
 addpath(genpath('function_library'),genpath('user_functions'),genpath('SDparser'))
 
 % for quick support, just provide direct recording dir
-recordingDir = 'C:\dat\projects\a_misc\G3 test\recordings\in my room\20190214T101759Z';
+recordingDir = uigetdir('C:\dat\projects\a_misc\G3 test\recordings\in my room','Select projects or recording folder');
 
 
 
