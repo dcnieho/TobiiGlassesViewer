@@ -117,7 +117,7 @@ hm.UserData.settings = settings;
 
 %% load data
 % read glasses data
-hm.UserData.data            = getTobiiDataFromGlasses(hm.UserData.fileDir,qDEBUG);
+hm.UserData.data            = readG3DataFiles(hm.UserData.fileDir,qDEBUG);
 hm.UserData.data.quality    = computeDataQuality(hm.UserData.fileDir, hm.UserData.data, hm.UserData.settings.dataQuality.windowLength);
 hm.UserData.ui.haveEyeVideo = isfield(hm.UserData.data.video,'eye');
 %% get coding setup
