@@ -31,56 +31,14 @@ end
 
 addpath(genpath('function_library'),genpath('user_functions'),genpath('SDparser'))
 
-% select either the folder of a specific recording to open, or the projects
-% directory copied from the SD card itself. So, if "projects" is the
-% project folder on the SD card, there are two places that you can point
-% the software to:
-% 1. the projects folder itself
-% 2. the folder of a specific recording. An example of a specific recording
-%    is: projects\raoscyb\recordings\gzz7stc. Note that the higher level
-%    folders are not needed when opening a recording, so you can just copy
-%    the "gzz7stc" of this example somewhere and open it in isolation.
-if 1
-    selectedDir = uigetdir('','Select projects or recording folder');
-else
-    % for easy use, hardcode a folder. 
-    mydir       = fileparts(mfilename('fullpath'));
-    if 1
-        % example of where project directory is selected, shows recording
-        % selector
-        selectedDir = fullfile(mydir,'demo_data','projects');
-    else
-        % example of where a recording is directly selected
-        selectedDir = fullfile(mydir,'demo_data','projects','raoscyb','recordings','gzz7stc');
-    end
-end
-if ~selectedDir
-    return
-end
-
-% find out if this is a projects folder or the folder of an individual
-% recording, take appropriate action
-if exist(fullfile(selectedDir,'segments'),'dir') && exist(fullfile(selectedDir,'recording.json'),'file')
-    recordingDir = selectedDir;
-else
-    % assume this is a project dir. G2ProjectParser will fail if it is not
-    if ~exist(fullfile(selectedDir,'lookup.xls'),'file')
-        success = G2ProjectParser(selectedDir);
-        if ~success
-            error('Could not find projects in the folder: %s',selectedDir);
-        end
-    end
-    recordingDir = recordingSelector(selectedDir);
-    if isempty(recordingDir)
-        return
-    end
-end
+% for quick support, just provide direct recording dir
+recordingDir = 'C:\dat\projects\a_misc\G3 test\recordings\in my room\20190214T101759Z';
 
 
 
 %% init figure
 hm=figure();
-hm.Name='Tobii Pro Glasses 2 Viewer';
+hm.Name='Tobii Pro Glasses 2/3 Viewer';
 hm.NumberTitle = 'off';
 hm.Units = 'pixels';
 hm.MenuBar = 'none';
@@ -135,13 +93,17 @@ else
     hm.UserData.coding.hasCoding = false;
 end
 % update figure title
-hm.Name = [hm.Name ' (' hm.UserData.data.subjName '-' hm.UserData.data.recName ')'];
+if isfield(hm.UserData.data,'recName')
+    hm.Name = [hm.Name ' (' hm.UserData.data.subjName '-' hm.UserData.data.recName ')'];
+else
+    hm.Name = [hm.Name ' (' hm.UserData.data.subjName ')'];
+end
 
 %% setup time
 % setup main time and timer for smooth playback
 hm.UserData.time.tickPeriod         = 0.05; % 20Hz hardcoded (doesn't have to update so frequently, that can't be displayed by this GUI anyway)
 hm.UserData.time.timeIncrement      = hm.UserData.time.tickPeriod;   % change to play back at slower rate
-hm.UserData.time.currentTime        = 0;
+hm.UserData.time.currentTime        = hm.UserData.data.time.startTime;
 hm.UserData.time.startTime          = hm.UserData.data.time.startTime;
 hm.UserData.time.endTime            = hm.UserData.data.time.endTime;
 hm.UserData.time.mainTimer          = timer('Period', hm.UserData.time.tickPeriod, 'ExecutionMode', 'fixedRate', 'TimerFcn', @(~,evt) timerTick(evt,hm), 'BusyMode', 'drop', 'TasksToExecute', inf, 'StartFcn',@(~,evt) initPlayback(evt,hm));
@@ -186,6 +148,14 @@ panels = {'azi','scarf','ele','videoGaze','gazePoint3D','vel','pup','pupCentLeft
 if ~hm.UserData.coding.hasCoding    % if don't have coding, make sure scarf panel is not in list of panels that can be shown, nor in user setup
     panels(strcmp(panels,'scarf')) = [];
     hm.UserData.settings.plot.initPanelOrder(strcmp(hm.UserData.settings.plot.initPanelOrder,'scarf')) = [];
+end
+if ~isfield(hm.UserData.data,'gyroscope')
+    panels(strcmp(panels,'gyro')) = [];
+    hm.UserData.settings.plot.initPanelOrder(strcmp(hm.UserData.settings.plot.initPanelOrder,'gyro')) = [];
+end
+if ~isfield(hm.UserData.data,'accelerometer')
+    panels(strcmp(panels,'acc')) = [];
+    hm.UserData.settings.plot.initPanelOrder(strcmp(hm.UserData.settings.plot.initPanelOrder,'acc')) = [];
 end
 setupPlots(hm,panels);
 
@@ -475,18 +445,34 @@ if hm.UserData.coding.hasCoding
 end
 
 %% load videos
-segments = FolderFromFolder(fullfile(hm.UserData.fileDir,'segments'));
-for s=1:length(segments)
+if exist(fullfile(hm.UserData.fileDir,'segments'),'dir')
+    % G2
+    segments = FolderFromFolder(fullfile(hm.UserData.fileDir,'segments'));
+    for s=1:length(segments)
+        for p=1:1+hm.UserData.ui.haveEyeVideo
+            switch p
+                case 1
+                    file = 'fullstream.mp4';
+                case 2
+                    file = 'eyesstream.mp4';
+            end
+            hm.UserData.vid.objs(s,p) = makeVideoReader(fullfile(hm.UserData.fileDir,'segments',segments(s).name,file),false);
+            % for warmup, read first frame
+            hm.UserData.vid.objs(s,p).StreamHandle.read(1);
+        end
+    end
+else
+    % G3
     for p=1:1+hm.UserData.ui.haveEyeVideo
         switch p
             case 1
-                file = 'fullstream.mp4';
+                file = hm.UserData.data.video.scene.file;
             case 2
                 file = 'eyesstream.mp4';
         end
-        hm.UserData.vid.objs(s,p) = makeVideoReader(fullfile(hm.UserData.fileDir,'segments',segments(s).name,file),false);
+        hm.UserData.vid.objs(p) = makeVideoReader(fullfile(hm.UserData.fileDir,file),false);
         % for warmup, read first frame
-        hm.UserData.vid.objs(s,p).StreamHandle.read(1);
+        hm.UserData.vid.objs(p).StreamHandle.read(1);
     end
 end
 
